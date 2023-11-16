@@ -9,6 +9,7 @@ struct Customer {
     active: bool,
     address: Address,
 }
+
 #[derive(Serialize, Deserialize)]
 struct Address {
     address: String,
@@ -26,6 +27,26 @@ struct City {
 #[derive(Serialize, Deserialize)]
 struct Country {
     country: String,
+}
+#[derive(Serialize, Deserialize)]
+struct CustomerRes {
+    customer_id: i32,
+    first_name: String,
+    last_name: String,
+    email: String,
+    active: bool,
+    address_id: i32,
+    created: std::time::SystemTime,
+    updated: std::time::SystemTime,
+}
+fn get_id(request: &str) -> &str {
+    request
+        .split("/")
+        .nth(2)
+        .unwrap_or_default()
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
 }
 fn get_request_body(request: &str) -> Result<Customer, serde_json::Error> {
     serde_json::from_str(request.split("\r\n\r\n").last().unwrap_or_default())
@@ -55,11 +76,11 @@ fn insert_address(client: &mut Client, address: &Address) -> Result<i32, Postgre
 
 fn insert_customer(
     client: &mut Client,
-    user: &Customer,
+    user: Customer,
     address_id: i32,
 ) -> Result<(), PostgresError> {
     client.execute(
-        "INSERT INTO customer (first_name, last_name, email, address_id, active) VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO customer (first_name, last_name, email, address_id, active) VALUES ($1, $2, $3, $4, $5)",
         &[ &user.first_name, &user.last_name, &user.email, &address_id, &user.active],
     )?;
     Ok(())
@@ -70,9 +91,108 @@ pub fn handle_post_request(request: &str) -> (String, String) {
             insert_country(&mut client, &user.address.city.country).unwrap();
             insert_city(&mut client, &user.address.city).unwrap();
             let address_id = insert_address(&mut client, &user.address).unwrap();
-            insert_customer(&mut client, &user, address_id).unwrap();
+            insert_customer(&mut client, user, address_id).unwrap();
 
             (OK_RESPONSE.to_string(), "User created".to_string())
+        }
+        _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+    }
+}
+pub fn handle_get_request(request: &str) -> (String, String) {
+    println!("hola");
+    match (
+        get_id(&request).parse::<i32>(),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(mut client)) => {
+            match client.query_one("SELECT * FROM customer WHERE customer_id = $1", &[&id]) {
+                Ok(row) => {
+                    let customer = CustomerRes {
+                        customer_id: row.get(0),
+                        first_name: row.get(1),
+                        last_name: row.get(2),
+                        email: row.get(3),
+                        address_id: row.get(4),
+                        active: row.get(5),
+                        created: row.get(6),
+                        updated: row.get(7),
+                    };
+                    (
+                        OK_RESPONSE.to_string(),
+                        serde_json::to_string(&customer).unwrap(),
+                    )
+                }
+                _ => (NOT_FOUND.to_string(), "User not found".to_string()),
+            }
+        }
+        _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+    }
+}
+pub fn handle_get_all_request(_request: &str) -> (String, String) {
+    match Client::connect(DB_URL, NoTls) {
+        Ok(mut client) => {
+            let mut customers = Vec::new();
+            for row in client
+                .query(
+                    "SELECT customer_id, first_name, last_name, email, address_id, active, create_date,last_update FROM customer",
+                    &[],
+                )
+                .unwrap()
+            {
+                customers.push(CustomerRes {
+                    customer_id: row.get(0),
+                    first_name: row.get(1),
+                    last_name: row.get(2),
+                    email: row.get(3),
+                    address_id: row.get(4),
+                    active: row.get(5),
+                    created: row.get(6),
+                    updated: row.get(7),
+                })
+            }
+            (
+                OK_RESPONSE.to_string(),
+                serde_json::to_string(&customers).unwrap(),
+            )
+        }
+        _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+    }
+}
+
+pub fn handle_put_request(request: &str) -> (String, String) {
+    match (
+        get_id(&request).parse::<i32>(),
+        get_request_body(&request),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(user), Ok(mut client)) => {
+            client
+                .execute(
+                    "UPDATE users SET first_name = $1, email = $2 WHERE customer_id = $3",
+                    &[&user.first_name, &user.email, &id],
+                )
+                .unwrap();
+
+            (OK_RESPONSE.to_string(), "User updated".to_string())
+        }
+        _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+    }
+}
+pub fn handle_delete_request(request: &str) -> (String, String) {
+    match (
+        get_id(&request).parse::<i32>(),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(mut client)) => {
+            let rows_affected = client
+                .execute("DELETE FROM customer WHERE customer_id = $1", &[&id])
+                .unwrap();
+
+            if rows_affected == 0 {
+                return (NOT_FOUND.to_string(), "User not found".to_string());
+            }
+
+            (OK_RESPONSE.to_string(), "User deleted".to_string())
         }
         _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
     }

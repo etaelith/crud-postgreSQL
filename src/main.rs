@@ -1,22 +1,18 @@
-use customer::handle_post_request;
+use customer::{
+    handle_delete_request, handle_get_all_request, handle_get_request, handle_post_request,
+    handle_put_request,
+};
 
 use std::env;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 mod customer;
 mod tables;
-mod users;
+
 use tables::set_database;
 
 #[macro_use]
 extern crate serde_derive;
-
-#[derive(Serialize, Deserialize)]
-struct User {
-    id: Option<i32>,
-    name: String,
-    email: String,
-}
 
 //DATABASE URL
 pub const DB_URL: &str = env!("DATABASE_URL");
@@ -57,10 +53,11 @@ fn handle_client(mut stream: TcpStream) {
 
             let (status_line, content) = match &*request {
                 r if r.starts_with("POST /users") => handle_post_request(r),
-                /* r if r.starts_with("GET /users/") => handle_get_request(r),
+                r if r.starts_with("GET /users/") => handle_get_request(r),
                 r if r.starts_with("GET /users") => handle_get_all_request(r),
                 r if r.starts_with("PUT /users/") => handle_put_request(r),
-                r if r.starts_with("DELETE /users/") => handle_delete_request(r), */
+                r if r.starts_with("DELETE /users/") => handle_delete_request(r),
+
                 _ => (NOT_FOUND.to_string(), "404 not found".to_string()),
             };
             stream
