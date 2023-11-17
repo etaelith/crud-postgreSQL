@@ -9,7 +9,7 @@ pub fn set_database() -> Result<(), PostgresError> {
         "
         CREATE TABLE IF NOT EXISTS country (
             country_id SERIAL PRIMARY KEY,
-            country VARCHAR(50) NOT NULL,
+            country VARCHAR(50) NOT NULL UNIQUE,
             last_update TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         
@@ -20,6 +20,8 @@ pub fn set_database() -> Result<(), PostgresError> {
             last_update TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_city_country ON city (city, country_id);
+
         CREATE TABLE IF NOT EXISTS address (
             address_id SERIAL PRIMARY KEY,
             address VARCHAR(50) NOT NULL,

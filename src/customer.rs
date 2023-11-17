@@ -53,7 +53,7 @@ fn get_request_body(request: &str) -> Result<Customer, serde_json::Error> {
 }
 fn insert_country(client: &mut Client, country: &Country) -> Result<(), PostgresError> {
     client.execute(
-        "INSERT INTO country (country) VALUES ($1)",
+        "INSERT INTO country (country) VALUES ($1) ON CONFLICT (country) DO NOTHING",
         &[&country.country],
     )?;
     Ok(())
@@ -61,7 +61,7 @@ fn insert_country(client: &mut Client, country: &Country) -> Result<(), Postgres
 
 fn insert_city(client: &mut Client, city: &City) -> Result<(), PostgresError> {
     client.execute(
-        "INSERT INTO city (city, country_id) VALUES ($1, (SELECT country_id FROM country WHERE country = $2))",
+        "INSERT INTO city (city, country_id) VALUES ($1, (SELECT country_id FROM country WHERE country = $2)) ON CONFLICT (city, country_id) DO NOTHING",
         &[&city.city, &city.country.country],
     )?;
     Ok(())
